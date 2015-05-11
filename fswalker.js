@@ -299,7 +299,18 @@ exports.Walker.prototype.walk = function(options, callback) {
 
                                 self._stats.totalFiles += 1;
 
-                                if (!ignore( linkStat.isDirectory() ? "dir" : "file")) {
+                                var ignored = ignore( linkStat.isDirectory() ? "dir" : "file");
+
+                                if (
+                                    !ignored ||
+                                    options.returnIgnoredFilesInPaths === true
+                                ) {
+                                    if (ignored) {
+                                        self._stats.ignoredFiles += 1;
+                                        if (options.returnIgnoredFiles) {
+                                            self._stats.ignoredFileList.push(subPath + "/" + basename);
+                                        }                                        
+                                    }
                                     list[subPath + "/" + basename] = {
                                         mtime: stat.mtime.getTime(),
                                         size: stat.size,
@@ -307,6 +318,10 @@ exports.Walker.prototype.walk = function(options, callback) {
                                         symlink: val,
                                         symlinkReal: "/" + PATH.relative(self._rootPath, linkDir)
                                     };
+                                    if (ignored) {
+                                        // TODO: Record which rule in which ignorefile matches this path.
+                                        list[subPath + "/" + basename].ignored = true;
+                                    }
                                     if (options.excludeMtime) {
                                         delete list[subPath + "/" + basename].mtime;
                                     }
@@ -372,12 +387,25 @@ exports.Walker.prototype.walk = function(options, callback) {
                     } else
                     if (stat.isFile()) {
                         self._stats.totalFiles += 1;
-                        if (!ignore("file")) {
+                        var ignored = ignore("file");
+                        if (
+                            !ignored ||
+                            options.returnIgnoredFilesInPaths === true
+                        ) {
+                            if (ignored) {
+                                self._stats.ignoredFiles += 1;
+                                if (options.returnIgnoredFiles) {
+                                    self._stats.ignoredFileList.push(subPath + "/" + basename);
+                                }                                
+                            }
                         	self._stats.totalSize += stat.size;
                             list[subPath + "/" + basename] = {
                                 mtime: stat.mtime.getTime(),
                                 size: stat.size
                             };
+                            if (ignored) {
+                                list[subPath + "/" + basename].ignored = true;
+                            }
                             if (options.excludeMtime) {
                                 delete list[subPath + "/" + basename].mtime;
                             }
