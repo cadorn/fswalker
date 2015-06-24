@@ -189,6 +189,7 @@ exports.Walker.prototype.walk = function(options, callback) {
             }
             function error(err) {
                 c = -1;
+                console.error(err.stack, new Error().stack);
                 return callback(err);
             }
             function done() {
@@ -259,10 +260,58 @@ exports.Walker.prototype.walk = function(options, callback) {
                     // All deeper nodes.
                     return select(ignoreRules.every, basename + ((type === "dir") ? "/" : ""));
                 }
+
+                function addFileForStat (stat) {
+                    self._stats.totalFiles += 1;
+                    var ignored = ignore("file");
+                    if (
+                        !ignored ||
+                        options.returnIgnoredFilesInPaths === true
+                    ) {
+                        if (ignored) {
+                            self._stats.ignoredFiles += 1;
+                            if (options.returnIgnoredFiles) {
+                                self._stats.ignoredFileList.push(subPath + "/" + basename);
+                            }                                
+                        }
+                        self._stats.totalSize += stat.size;
+                        list[subPath + "/" + basename] = {
+                            mtime: stat.mtime.getTime(),
+                            size: stat.size
+                        };
+                        if (ignored) {
+                            list[subPath + "/" + basename].ignored = true;
+                        }
+                        if (options.excludeMtime) {
+                            delete list[subPath + "/" + basename].mtime;
+                        }
+                    } else {
+                        self._stats.ignoredFiles += 1;
+                        if (options.returnIgnoredFiles) {
+                            self._stats.ignoredFileList.push(subPath + "/" + basename);
+                        }
+                    }
+                }
+
                 c += 1;
                 FS.lstat(PATH.join(self._rootPath, subPath, basename), function(err, stat) {
-                    if (err) return error(err);                    
                     c -= 1;
+                    if (err) {
+                        if (err.errno === 34) {  // ENOENT
+                            // file is empty.
+                            c += 1;
+                            return FS.stat(PATH.join(self._rootPath, subPath, basename), function(err, stat) {
+                                c -= 1;
+                                if (err) {
+                                    return error(err);
+                                }
+                                addFileForStat(stat);
+                                return done();
+                            });
+                        }
+                        return error(err);
+                    }
+
                     if (stat.isSymbolicLink()) {
                         c += 1;
                         FS.readlink(PATH.join(self._rootPath, subPath, basename), function(err, val) {
@@ -386,35 +435,7 @@ exports.Walker.prototype.walk = function(options, callback) {
                         }
                     } else
                     if (stat.isFile()) {
-                        self._stats.totalFiles += 1;
-                        var ignored = ignore("file");
-                        if (
-                            !ignored ||
-                            options.returnIgnoredFilesInPaths === true
-                        ) {
-                            if (ignored) {
-                                self._stats.ignoredFiles += 1;
-                                if (options.returnIgnoredFiles) {
-                                    self._stats.ignoredFileList.push(subPath + "/" + basename);
-                                }                                
-                            }
-                        	self._stats.totalSize += stat.size;
-                            list[subPath + "/" + basename] = {
-                                mtime: stat.mtime.getTime(),
-                                size: stat.size
-                            };
-                            if (ignored) {
-                                list[subPath + "/" + basename].ignored = true;
-                            }
-                            if (options.excludeMtime) {
-                                delete list[subPath + "/" + basename].mtime;
-                            }
-                        } else {
-                            self._stats.ignoredFiles += 1;
-                            if (options.returnIgnoredFiles) {
-                            	self._stats.ignoredFileList.push(subPath + "/" + basename);
-                            }
-                        }
+                        addFileForStat(stat);
                     }
                     done();
                 });
