@@ -131,6 +131,9 @@ exports.Walker.prototype._loadIgnoreRules = function(ignoreRules, subPath, optio
             ignoreFiles.push(".npmignore");
         }
     }
+    if (options.respectGitignore) {
+        ignoreFiles.push(".gitignore");
+    }
     if (ignoreFiles.length === 0) {
         ignoreFiles.push(".gitignore");
     }
